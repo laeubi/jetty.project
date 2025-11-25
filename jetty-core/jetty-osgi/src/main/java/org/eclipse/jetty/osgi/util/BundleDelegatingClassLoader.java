@@ -38,7 +38,6 @@ public class BundleDelegatingClassLoader extends ClassLoader implements BundleRe
 {
     private final Bundle _bundle;
     private volatile ClassLoader _bundleClassLoader;
-    private volatile boolean _classLoaderResolved;
 
     /**
      * Creates a new BundleDelegatingClassLoader for the given bundle.
@@ -66,20 +65,27 @@ public class BundleDelegatingClassLoader extends ClassLoader implements BundleRe
     @Override
     protected Class<?> loadClass(String name, boolean resolve) throws ClassNotFoundException
     {
+        // Check if we already have a resolved bundle classloader
+        ClassLoader cl = _bundleClassLoader;
+        if (cl != null)
+        {
+            Class<?> clazz = cl.loadClass(name);
+            if (resolve)
+            {
+                resolveClass(clazz);
+            }
+            return clazz;
+        }
+        
+        // Load the class via Bundle API
         Class<?> clazz = _bundle.loadClass(name);
         
-        // On first class load, capture the real bundle classloader for subsequent use
-        // Note: clazz.getClassLoader() may return null for bootstrap classes
-        if (!_classLoaderResolved)
+        // Try to acquire the real bundle classloader from the loaded class
+        ClassLoader classLoader = clazz.getClassLoader();
+        // Verify the classloader is for our bundle (implements BundleReference for same bundle)
+        if (classLoader instanceof BundleReference bundleRef && bundleRef.getBundle() == _bundle)
         {
-            synchronized (this)
-            {
-                if (!_classLoaderResolved)
-                {
-                    _bundleClassLoader = clazz.getClassLoader();
-                    _classLoaderResolved = true;
-                }
-            }
+            _bundleClassLoader = classLoader;
         }
         
         if (resolve)
