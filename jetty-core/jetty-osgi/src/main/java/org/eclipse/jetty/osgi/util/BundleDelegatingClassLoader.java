@@ -38,6 +38,7 @@ public class BundleDelegatingClassLoader extends ClassLoader implements BundleRe
 {
     private final Bundle _bundle;
     private volatile ClassLoader _bundleClassLoader;
+    private volatile boolean _classLoaderResolved;
 
     /**
      * Creates a new BundleDelegatingClassLoader for the given bundle.
@@ -68,13 +69,15 @@ public class BundleDelegatingClassLoader extends ClassLoader implements BundleRe
         Class<?> clazz = _bundle.loadClass(name);
         
         // On first class load, capture the real bundle classloader for subsequent use
-        if (_bundleClassLoader == null)
+        // Note: clazz.getClassLoader() may return null for bootstrap classes
+        if (!_classLoaderResolved)
         {
             synchronized (this)
             {
-                if (_bundleClassLoader == null)
+                if (!_classLoaderResolved)
                 {
                     _bundleClassLoader = clazz.getClassLoader();
+                    _classLoaderResolved = true;
                 }
             }
         }
@@ -131,6 +134,8 @@ public class BundleDelegatingClassLoader extends ClassLoader implements BundleRe
             }
             catch (IOException e)
             {
+                // Return null on IOException to follow ClassLoader.getResourceAsStream() contract
+                // which returns null if the resource cannot be read
                 return null;
             }
         }
